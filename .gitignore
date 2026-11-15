@@ -1,10 +1,22 @@
 # python make
 ingot_cli.egg-info
-build
-__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+*__pycache__/
 
 # virtual envornments
 .venv/
 .env/
 venv/
 env/
+
+# Ingot bundles
+output/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

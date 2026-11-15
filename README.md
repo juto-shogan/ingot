@@ -244,6 +244,14 @@ The token is used only for cloning and the GitHub API. It is never written to di
 
 ---
 
+## Contributing
+
+Contributions are welcome, and beginners are especially encouraged. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup, how to run the tests, and how to open a pull request, then look for issues labeled `good first issue`.
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE).
