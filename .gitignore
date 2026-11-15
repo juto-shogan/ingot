@@ -1,6 +1,7 @@
 # python make
 ingot_cli.egg-info
 build
+__pycache__/
 
 # virtual envornments
 .venv/
