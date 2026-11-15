@@ -22,7 +22,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 CONFIG_DIR = Path(os.environ.get("INGOT_HOME", str(Path.home() / ".ingot")))
 SAVED_FILE = CONFIG_DIR / "saved.json"
@@ -61,7 +61,7 @@ LANG_BY_EXT = {
     ".bat": "batch", ".ps1": "powershell", ".html": "html", ".css": "css",
     ".scss": "scss", ".json": "json", ".yml": "yaml", ".yaml": "yaml",
     ".toml": "toml", ".xml": "xml", ".md": "markdown", ".sql": "sql",
-    ".txt": "text", ".env": "env", ".vue": "vue", ".svelte": "svelte",
+    ".txt": "text", ".env": "env", ".ipynb": "jupyter notebook (converted to cells)", ".vue": "vue", ".svelte": "svelte",
 }
 
 
@@ -72,6 +72,16 @@ class IngotError(Exception):
 # --------------------------------------------------------------------------
 # Saved shortcuts ("contacts")
 # --------------------------------------------------------------------------
+
+def owner_of(target):
+    """GitHub account name from owner/repo or a GitHub URL (else None)."""
+    t = (target or "").strip()
+    m = re.match(r"^(?:https?://github\.com/|git@github\.com:)([\w.-]+)/", t)
+    if m:
+        return m.group(1)
+    m = re.match(r"^([\w.-]+)/[\w.-]+$", t)
+    return m.group(1) if m else None
+
 
 def load_store():
     if SAVED_FILE.is_file():
@@ -85,6 +95,12 @@ def load_store():
     settings = dict(DEFAULT_SETTINGS)
     settings.update(data.get("settings", {}))
     data["settings"] = settings
+    for item in data["items"]:
+        if not item.get("account"):
+            if item.get("type") == "github":
+                item["account"] = owner_of(item.get("target"))
+            elif item.get("type") == "account":
+                item["account"] = item.get("target")
     return data
 
 
@@ -101,12 +117,23 @@ def find_saved(data, name):
 
 
 def add_saved(data, name, kind, target, branch=None):
+    account = None
+    if kind == "github":
+        account = owner_of(target)
+    elif kind == "account":
+        account = target
+    entry = {"name": name, "type": kind, "target": target, "branch": branch, "account": account}
     existing = find_saved(data, name)
-    entry = {"name": name, "type": kind, "target": target, "branch": branch}
     if existing:
         data["items"][data["items"].index(existing)] = entry
     else:
         data["items"].append(entry)
+    # saving a repo also remembers the account it belongs to
+    if kind == "github" and account:
+        has_account = any(i["type"] == "account" and i["target"].lower() == account.lower() for i in data["items"])
+        if not has_account and find_saved(data, account) is None:
+            data["items"].append({"name": account, "type": "account", "target": account,
+                                  "branch": None, "account": account})
     save_store(data)
 
 
@@ -283,7 +310,7 @@ def collect_files(root, excludes=None, include_exts=None, max_kb=500, use_gitign
             except OSError:
                 skipped.append((rel, "unreadable"))
                 continue
-            if size_kb > max_kb:
+            if size_kb > (max(max_kb, 20480) if path.suffix.lower() == ".ipynb" else max_kb):
                 skipped.append((rel, "too large ({:.0f} KB)".format(size_kb)))
                 continue
             files.append((rel, path))
@@ -314,16 +341,79 @@ def build_tree(paths):
     return "\n".join(lines)
 
 
-def read_text(path):
-    return Path(path).read_text(encoding="utf-8", errors="replace")
+def _nb_outputs(outputs):
+    chunks = []
+    for o in outputs:
+        otype = o.get("output_type")
+        if otype == "stream":
+            text = o.get("text", "")
+        elif otype in ("execute_result", "display_data"):
+            text = (o.get("data") or {}).get("text/plain", "")
+        elif otype == "error":
+            text = "{}: {}".format(o.get("ename", "Error"), o.get("evalue", ""))
+        else:
+            text = ""
+        if isinstance(text, list):
+            text = "".join(text)
+        text = text.strip()
+        if text:
+            if len(text) > 2000:
+                text = text[:2000] + "\n... [output truncated]"
+            chunks.append(text)
+    return "\n".join(chunks)
 
 
-def build_document(project, source, files, skipped):
+def notebook_to_text(path, include_outputs=False):
+    """Turn a .ipynb into readable cell-by-cell text (images and metadata dropped)."""
+    raw = Path(path).read_text(encoding="utf-8", errors="replace")
+    try:
+        nb = json.loads(raw)
+    except ValueError:
+        return raw
+    cells = nb.get("cells")
+    if cells is None:  # old nbformat 3
+        cells = []
+        for ws in nb.get("worksheets", []):
+            cells.extend(ws.get("cells", []))
+    parts = []
+    for i, cell in enumerate(cells, 1):
+        src = cell.get("source", cell.get("input", ""))
+        if isinstance(src, list):
+            src = "".join(src)
+        src = src.rstrip()
+        ctype = cell.get("cell_type", "code")
+        if not src and ctype != "code":
+            continue
+        if ctype == "markdown":
+            body = "\n".join(("# " + ln) if ln else "#" for ln in src.splitlines())
+            parts.append("# %% [markdown] cell {}\n{}".format(i, body))
+        elif ctype == "code":
+            if not src and not (include_outputs and cell.get("outputs")):
+                continue
+            parts.append("# %% [code] cell {}\n{}".format(i, src))
+            if include_outputs:
+                out = _nb_outputs(cell.get("outputs", []))
+                if out:
+                    body = "\n".join("# " + ln for ln in out.splitlines())
+                    parts.append("# --- output ---\n" + body)
+        else:
+            parts.append("# %% [{}] cell {}\n{}".format(ctype, i, src))
+    return "\n\n".join(parts)
+
+
+def read_text(path, nb_outputs=False):
+    path = Path(path)
+    if path.suffix.lower() == ".ipynb":
+        return notebook_to_text(path, nb_outputs)
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def build_document(project, source, files, skipped, nb_outputs=False):
     bar = "=" * 80
     thin = "-" * 80
     contents, total_lines, total_chars = [], 0, 0
     for rel, path in files:
-        text = read_text(path)
+        text = read_text(path, nb_outputs)
         contents.append((rel, text))
         total_lines += len(text.splitlines())
         total_chars += len(text)
@@ -376,17 +466,17 @@ def safe_name(text):
 # --------------------------------------------------------------------------
 
 def run_job(kind, target, opts):
-    """kind: 'github' or 'local'. Returns output path."""
+    """kind: 'github' or 'local'. Returns a dict describing the result."""
+    log = opts.get("log") or print
     out_dir = Path(opts["output_dir"]).expanduser()
-    out_dir.mkdir(parents=True, exist_ok=True)
     tmp = None
     try:
         if kind == "github":
             url = normalize_repo(target)
             project = repo_name_from_url(url)
             tmp = tempfile.mkdtemp(prefix="ingot_")
-            print("Cloning {} ...".format(url))
-            clone_repo(url, tmp + os.sep + "repo", opts.get("branch"), opts.get("token"))
+            log("Cloning {} ...".format(url))
+            clone_repo(url, os.path.join(tmp, "repo"), opts.get("branch"), opts.get("token"))
             root = Path(tmp) / "repo"
             source = url
         else:
@@ -396,7 +486,7 @@ def run_job(kind, target, opts):
             project = root.name or "project"
             source = str(root)
 
-        print("Scanning files ...")
+        log("Scanning files ...")
         files, skipped = collect_files(
             root, opts.get("excludes"), opts.get("exts"), opts.get("max_kb", 500),
             opts.get("use_gitignore", True),
@@ -404,15 +494,18 @@ def run_job(kind, target, opts):
         if not files:
             raise IngotError("No readable code files found (check your filters).")
 
-        doc, lines, tokens = build_document(project, source, files, skipped)
+        doc, lines, tokens = build_document(project, source, files, skipped, opts.get("nb_outputs", False))
+        project_dir = out_dir / safe_name(project)
+        project_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        out_path = out_dir / "{}_{}.txt".format(safe_name(project), stamp)
+        out_path = project_dir / "{}_{}.txt".format(safe_name(project), stamp)
         out_path.write_text(doc, encoding="utf-8")
-        print("\nDone. {} files, {:,} lines, ~{:,} tokens".format(len(files), lines, tokens))
+        log("Done. {} files, {:,} lines, ~{:,} tokens".format(len(files), lines, tokens))
         if skipped:
-            print("Skipped {} files (binary / too large). Listed at the end of the output.".format(len(skipped)))
-        print("Saved to: {}".format(out_path.resolve()))
-        return out_path
+            log("Skipped {} files (binary / too large). Listed at the end of the output.".format(len(skipped)))
+        log("Saved to: {}".format(out_path.resolve()))
+        return {"path": out_path, "project": project, "source": source, "files": len(files),
+                "lines": lines, "tokens": tokens, "skipped": len(skipped), "text": doc}
     finally:
         if tmp:
             _rmtree(tmp)
@@ -466,6 +559,7 @@ def base_opts(store, args=None):
         "use_gitignore": not getattr(args, "no_gitignore", False),
         "branch": getattr(args, "branch", None),
         "token": getattr(args, "token", None) or os.environ.get("GITHUB_TOKEN"),
+        "nb_outputs": getattr(args, "nb_outputs", False),
     }
 
 
@@ -481,7 +575,8 @@ def maybe_save(store, kind, target, branch=None):
         default_name = repo_name_from_url(target) if kind != "local" else Path(target).name
         name = ask("Nickname", default_name)
         add_saved(store, name, kind, target, branch)
-        print("Saved as '{}'.".format(name))
+        account = owner_of(target) if kind == "github" else None
+        print("Saved as '{}'{}.".format(name, " under account @{}".format(account) if account else ""))
 
 
 def flow_github_repo(store, opts):
@@ -499,10 +594,7 @@ def flow_github_repo(store, opts):
     maybe_save(store, "github", target, branch)
 
 
-def flow_github_account(store, opts):
-    user = ask("GitHub username or org")
-    if not user:
-        return
+def browse_account(store, user, opts):
     try:
         print("Fetching repos ...")
         repos = list_account_repos(user, opts.get("token"))
@@ -512,8 +604,6 @@ def flow_github_account(store, opts):
     if not repos:
         print("No repos found.")
         return
-    if yes("Save '{}' as an account shortcut?".format(user)):
-        add_saved(store, user, "account", user)
     labels = ["{}{}".format(r["name"], "  - " + r["description"][:60] if r.get("description") else "") for r in repos]
     idx = choose("Repos for {} (newest activity first)".format(user), labels)
     if idx is None:
@@ -521,6 +611,15 @@ def flow_github_account(store, opts):
     full = repos[idx]["full_name"]
     safe_run("github", full, opts)
     maybe_save(store, "github", full)
+
+
+def flow_github_account(store, opts):
+    user = ask("GitHub username or org")
+    if not user:
+        return
+    if find_saved(store, user) is None and yes("Save '{}' as an account shortcut?".format(user)):
+        add_saved(store, user, "account", user)
+    browse_account(store, user, opts)
 
 
 def flow_local(store, opts):
@@ -533,27 +632,63 @@ def flow_local(store, opts):
         maybe_save(store, "local", str(Path(target).expanduser().resolve()))
 
 
+def saved_accounts(store):
+    names = []
+    for i in store["items"]:
+        acc = i.get("account")
+        if i["type"] in ("account", "github") and acc and acc.lower() not in [n.lower() for n in names]:
+            names.append(acc)
+    return names
+
+
+def repos_of(store, account):
+    return [i for i in store["items"]
+            if i["type"] == "github" and (i.get("account") or "").lower() == account.lower()]
+
+
+def print_saved(store):
+    if not store["items"]:
+        print("Nothing saved yet.")
+        return
+    for acc in saved_accounts(store):
+        print("@{}".format(acc))
+        for r in repos_of(store, acc):
+            br = "  [{}]".format(r["branch"]) if r.get("branch") else ""
+            print("    {}  ->  {}{}".format(r["name"], r["target"], br))
+    for i in store["items"]:
+        if i["type"] == "local":
+            print("[local] {}  ->  {}".format(i["name"], i["target"]))
+
+
+def flow_saved_account(store, account, opts):
+    repos = repos_of(store, account)
+    labels = ["Browse all repos on GitHub"] + ["{}  ->  {}".format(r["name"], r["target"]) for r in repos]
+    idx = choose("@{}".format(account), labels)
+    if idx is None:
+        return
+    if idx == 0:
+        browse_account(store, account, opts)
+    else:
+        item = repos[idx - 1]
+        safe_run("github", item["target"], dict(opts, branch=item.get("branch") or opts.get("branch")))
+
+
 def flow_saved(store, opts):
     if not store["items"]:
         print("\nNothing saved yet. Run a job and choose 'Save this for next time'.")
         return
-    labels = ["[{}] {}  ->  {}".format(i["type"], i["name"], i["target"]) for i in store["items"]]
+    accounts = saved_accounts(store)
+    locals_ = [i for i in store["items"] if i["type"] == "local"]
+    labels = ["@{}  (account, {} saved repos)".format(a, len(repos_of(store, a))) for a in accounts]
+    labels += ["[local] {}  ->  {}".format(i["name"], i["target"]) for i in locals_]
     idx = choose("Saved shortcuts", labels)
     if idx is None:
         return
-    item = store["items"][idx]
-    if item["type"] == "account":
-        try:
-            repos = list_account_repos(item["target"], opts.get("token"))
-        except IngotError as e:
-            print("Error: {}".format(e))
-            return
-        ridx = choose("Repos for {}".format(item["target"]), [r["name"] for r in repos])
-        if ridx is None:
-            return
-        safe_run("github", repos[ridx]["full_name"], opts)
+    if idx < len(accounts):
+        flow_saved_account(store, accounts[idx], opts)
     else:
-        safe_run(item["type"], item["target"], dict(opts, branch=item.get("branch") or opts.get("branch")))
+        item = locals_[idx - len(accounts)]
+        safe_run("local", item["target"], opts)
 
 
 def flow_manage(store):
@@ -581,10 +716,7 @@ def flow_manage(store):
                 save_store(store)
                 print("Removed '{}'.".format(gone["name"]))
         else:
-            if not store["items"]:
-                print("Nothing saved yet.")
-            for i in store["items"]:
-                print("  [{}] {}  ->  {}".format(i["type"], i["name"], i["target"]))
+            print_saved(store)
 
 
 def flow_settings(store):
@@ -597,6 +729,15 @@ def flow_settings(store):
     print("Settings saved.")
 
 
+def start_web(store, port=8765, open_browser=True):
+    try:
+        import ingot_web
+    except ImportError:
+        print("Error: ingot_web.py must sit in the same folder as ingot.py.")
+        return
+    ingot_web.serve(store, port, open_browser)
+
+
 def interactive(store, args):
     print("\n  INGOT  v{}  -  melt a codebase into one AI-ready file".format(__version__))
     while True:
@@ -604,7 +745,7 @@ def interactive(store, args):
         choice = choose(
             "What do you want to bundle?",
             ["GitHub repo", "GitHub account (browse repos)", "Local folder", "Saved shortcuts",
-             "Manage saved", "Settings"],
+             "Manage saved", "Settings", "Start local web UI"],
             allow_back=False,
         )
         if choice is None:
@@ -622,6 +763,8 @@ def interactive(store, args):
             flow_manage(store)
         elif choice == 5:
             flow_settings(store)
+        elif choice == 6:
+            start_web(store)
 
 
 # --------------------------------------------------------------------------
@@ -634,6 +777,7 @@ def add_common(p):
     p.add_argument("--ext", action="append", help="only include this extension, e.g. py (repeatable)")
     p.add_argument("--max-kb", type=int, help="skip files larger than this many KB (default 500)")
     p.add_argument("--no-gitignore", action="store_true", help="do not honor the repo's .gitignore")
+    p.add_argument("--nb-outputs", action="store_true", help="include text outputs of Jupyter notebook cells")
 
 
 def build_parser():
@@ -664,6 +808,10 @@ def build_parser():
 
     sub.add_parser("list", help="list saved shortcuts")
 
+    w = sub.add_parser("web", help="start the local web UI")
+    w.add_argument("--port", type=int, default=8765, help="port (default 8765)")
+    w.add_argument("--no-browser", action="store_true", help="do not open the browser automatically")
+
     rm = sub.add_parser("remove", help="remove a saved shortcut")
     rm.add_argument("name")
 
@@ -686,10 +834,9 @@ def main(argv=None):
 
     try:
         if args.cmd == "list":
-            if not store["items"]:
-                print("Nothing saved yet.")
-            for i in store["items"]:
-                print("[{}] {}  ->  {}".format(i["type"], i["name"], i["target"]))
+            print_saved(store)
+        elif args.cmd == "web":
+            start_web(store, args.port, not args.no_browser)
         elif args.cmd == "remove":
             item = find_saved(store, args.name)
             if not item:

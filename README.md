@@ -2,49 +2,53 @@
 
 **Melt an entire codebase into one AI-ready text file.**
 
-Ingot clones a GitHub repo (or reads a local folder), pulls the code out of every file, and writes it all into a single, cleanly separated `.txt` document. Every file's path is stated above its code, so an AI can see exactly where each piece lives. Upload one file instead of fifty.
+Ingot takes a GitHub repo or a folder on your computer and writes all of its code into a single, cleanly separated `.txt` file. The path of every file is stated above its code, so an AI knows exactly where each piece lives. Upload one file instead of fifty.
 
-![Python](https://img.shields.io/badge/python-3.8%2B-blue) ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen) ![License](https://img.shields.io/badge/license-MIT-lightgrey)
+It comes with a **command-line menu** and a **local web page** where you paste a URL, click Extract, and copy the result.
 
 ---
 
 ## Features
 
-- **GitHub or local**: bundle a public or private repo, a whole GitHub account's repos, or any folder on your machine
-- **Saved shortcuts**: keep repos, accounts and folders in a contact list and rerun them by nickname
-- **Interactive menu**: run `ingot` with no arguments and pick what you want
-- **Scriptable**: every action also works as a one-line command
-- **Clean output**: header, directory tree, then each file under a banner with its path, language and line count
-- **Smart filtering**: skips `.git`, `node_modules`, build folders, lock files, binaries and oversized files, and honors the repo's `.gitignore`
-- **Token estimate**: shows an approximate token count so you know it fits your AI's context window
-- **Zero dependencies**: only Python 3.8+ and `git`
+- **GitHub or local:** bundle a public or private repo, browse all repos of a GitHub account, or bundle any folder on your machine
+- **Local web UI:** paste a link or folder path in your browser, then copy or download the bundle
+- **Saved shortcuts, organized by account:** save repos, GitHub accounts and folders once, then reuse them by nickname. Repos are grouped under the account they belong to
+- **Organized output:** every project gets its own folder inside `output/`
+- **Jupyter notebooks (`.ipynb`):** converted to clean cell-by-cell text, with images and metadata stripped
+- **Smart filtering:** skips `.git`, `node_modules`, build folders, lock files, binaries and oversized files, and respects `.gitignore`
+- **Token estimate:** see roughly how many tokens the bundle uses
+- **No dependencies:** just Python 3.8+ and git
 
 ---
 
-## Installation
+## Setup (Windows)
 
-```bash
-git clone https://github.com/<your-username>/ingot.git
+1. Install [Python](https://www.python.org/downloads/) (tick **"Add python.exe to PATH"** in the installer) and [Git](https://git-scm.com/download/win)
+2. Download the project:
+
+```powershell
+git clone https://github.com/juto-shogan/ingot.git
 cd ingot
-pip install .
 ```
 
-Now `ingot` works from anywhere. Prefer not to install? Run it directly:
+3. Run it:
 
-```bash
+```powershell
 python ingot.py
 ```
 
-**Requirements:** Python 3.8+ and [git](https://git-scm.com) on your PATH.
+That is all. No install step is needed. Keep `ingot.py` and `ingot_web.py` in the same folder.
+
+> **Optional: use the short `ingot` command.** Run `python -m pip install .` inside the folder. If Windows then says `ingot` is not recognized, the Python Scripts folder is not on your PATH. Either add it, or just keep using `python ingot.py` or `python -m ingot`. Everything below works with either.
+
+**macOS / Linux:** the same steps work, with `python3` instead of `python`.
 
 ---
 
-## Quick start
+## Using the menu
 
-### Interactive mode
-
-```bash
-ingot
+```powershell
+python ingot.py
 ```
 
 ```
@@ -55,97 +59,107 @@ What do you want to bundle?
   4) Saved shortcuts
   5) Manage saved
   6) Settings
+  7) Start local web UI
   0) Quit
 ```
 
-After each run, Ingot offers to save the source so next time is two keystrokes.
-
-### Command mode
-
-```bash
-# a GitHub repo (owner/repo or full URL)
-ingot github torvalds/linux --branch master
-
-# a local folder
-ingot local ~/projects/my-app
-
-# save while running, rerun later by nickname
-ingot github octocat/Hello-World --save hello
-ingot run hello
-```
-
-Your bundle lands in the `output/` folder as `<project>_<timestamp>.txt`.
+After each run, Ingot offers to save the source for next time.
 
 ---
 
-## Saved shortcuts
+## Using the web UI
 
-Shortcuts live in `~/.ingot/saved.json` and come in three types:
+```powershell
+python ingot.py web
+```
 
-| Type        | What it stores                                                | Example                      |
-| ----------- | ------------------------------------------------------------- | ---------------------------- |
-| `github`  | a single repo                                                 | `octocat/Hello-World`      |
-| `account` | a GitHub user or org; Ingot lists their repos so you pick one | `octocat`                  |
-| `local`   | a folder path                                                 | `C:\Users\me\projects\app` |
+Your browser opens at `http://127.0.0.1:8765`.
 
-```bash
-ingot save work-api github mycompany/api
-ingot save me account my-username
-ingot save notes local ~/notes
-ingot list
-ingot run work-api
-ingot remove notes
+1. Choose **GitHub** or **Local folder**
+2. Paste a repo URL (or `owner/repo`), or type the full folder path
+3. Click **Extract**
+4. Click **Copy all text** and paste it into your AI, or **Download .txt**
+
+The page also shows your saved shortcuts (click one to fill the form, or use *browse repos* on an account) and your recent bundles.
+
+The server only listens on your own computer. Other devices and other websites cannot reach it. Stop it with `Ctrl+C`.
+
+Options: `--port 9000` to change the port, `--no-browser` to skip opening the browser.
+
+---
+
+## Command mode
+
+```powershell
+# GitHub repo (owner/repo or full URL)
+python ingot.py github octocat/Hello-World
+python ingot.py github octocat/Hello-World --branch main
+
+# Local folder
+python ingot.py local C:\Users\you\projects\my-app
+
+# Save while running, then rerun by nickname
+python ingot.py github octocat/Hello-World --save hello
+python ingot.py run hello
+```
+
+### Saved shortcuts
+
+Shortcuts live in `~/.ingot/saved.json` (on Windows: `C:\Users\you\.ingot\saved.json`).
+
+| Type | Stores | Example |
+|------|--------|---------|
+| `github` | a repo, remembered under its account | `octocat/Hello-World` |
+| `account` | a GitHub username or org, so you can browse its repos | `octocat` |
+| `local` | a folder path | `C:\projects\app` |
+
+Saving a repo automatically saves its **account name** too, so you can come back and browse that account's other repos. Shortcuts are displayed grouped by account:
+
+```
+@octocat
+    hello  ->  octocat/Hello-World
+    spoon  ->  octocat/Spoon-Knife
+[local] myapp  ->  C:\projects\app
+```
+
+```powershell
+python ingot.py save work github mycompany/api
+python ingot.py save me account my-username
+python ingot.py list
+python ingot.py run work
+python ingot.py remove work
 ```
 
 ---
 
-## Options
+## Output
 
-| Flag                      | Description                                                            |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `-o, --out DIR`         | output folder (default `./output`)                                   |
-| `-b, --branch NAME`     | branch or tag to clone (GitHub only)                                   |
-| `-e, --exclude PATTERN` | glob to skip, repeatable (e.g. `-e "*.test.js" -e "docs/*"`)         |
-| `--ext EXT`             | only include these extensions, repeatable (e.g. `--ext py --ext md`) |
-| `--max-kb N`            | skip files larger than N KB (default 500)                              |
-| `--no-gitignore`        | do not honor the repo's `.gitignore`                                 |
-| `--token TOKEN`         | GitHub token for private repos                                         |
-| `--save NAME`           | save the source as a shortcut after running                            |
+Each project gets its own folder:
 
-### Private repos
-
-Set a token once and Ingot uses it automatically:
-
-```bash
-# macOS / Linux
-export GITHUB_TOKEN=ghp_yourtoken
-
-# Windows (PowerShell)
-$env:GITHUB_TOKEN = "ghp_yourtoken"
+```
+output/
+  my-app/
+    my-app_20261115-101302.txt
+    my-app_20261116-093011.txt
+  Hello-World/
+    Hello-World_20261115-101300.txt
 ```
 
-The token is only used for the clone and the GitHub API. It is never written to disk or to the output file.
-
----
-
-## Output format
+Inside a bundle:
 
 ```
 ================================================================================
 PROJECT   : my-app
 SOURCE    : https://github.com/me/my-app.git
-GENERATED : 2026-11-15 09:25:36
+GENERATED : 2026-11-15 10:13:02
 FILES     : 12   LINES: 840   APPROX TOKENS: 7,350
-TOOL      : Ingot v1.0.0
 ================================================================================
 
 DIRECTORY STRUCTURE
 --------------------------------------------------------------------------------
 |-- src/
-|   |-- app.py
-|   `-- utils.py
+|   `-- app.py
 `-- README.md
-
 
 ================================================================================
 FILE 1/12: README.md
@@ -158,51 +172,77 @@ LANGUAGE: markdown   LINES: 24
 
 Skipped files (binary, too large) are listed at the bottom so nothing disappears silently.
 
+### Jupyter notebooks
+
+`.ipynb` files are converted to readable text instead of raw JSON:
+
+```
+# %% [markdown] cell 1
+# # Title
+# Some intro
+
+# %% [code] cell 2
+import pandas as pd
+print('hi')
+```
+
+Cell outputs, which can be huge, are left out by default. Add `--nb-outputs` (or tick the box in the web UI) to include text outputs. Images are always dropped.
+
 ---
 
-## Using the output with AI
+## Options
 
-1. Run Ingot on the project.
-2. Upload the `.txt` from `output/` to your AI of choice.
-3. Ask away: *"Explain the architecture"*, *"Find the bug in the auth flow"*, *"Write tests for `src/utils.py`"*. The file paths in the banners let the AI reference exact locations.
+| Flag | Description |
+|------|-------------|
+| `-o, --out DIR` | output folder (default `output`) |
+| `-b, --branch NAME` | branch or tag to clone (GitHub only) |
+| `-e, --exclude PATTERN` | glob to skip, repeatable (e.g. `-e "*.test.js" -e "docs/*"`) |
+| `--ext EXT` | only include these extensions, repeatable (e.g. `--ext py --ext md`) |
+| `--max-kb N` | skip files larger than N KB (default 500) |
+| `--no-gitignore` | do not honor the project's `.gitignore` |
+| `--nb-outputs` | include text outputs from notebook cells |
+| `--token TOKEN` | GitHub token for private repos |
+| `--save NAME` | save the source as a shortcut after running |
 
-If the file is too big, narrow it down with `--ext`, `-e` or `--max-kb`.
+### Private repos
 
----
+Set a GitHub token once and Ingot uses it automatically.
 
-## What gets skipped by default
+```powershell
+# PowerShell (current window)
+$env:GITHUB_TOKEN = "ghp_yourtoken"
 
-- **Folders:** `.git`, `node_modules`, `__pycache__`, `venv`, `dist`, `build`, `target`, `.next`, `vendor` and similar
-- **Files:** lock files (`package-lock.json`, `yarn.lock`, ...), images, fonts, archives, executables, minified JS, source maps
-- **Anything** matched by the project's root `.gitignore`
-- **Anything** over the size limit
+# Permanent
+setx GITHUB_TOKEN "ghp_yourtoken"
+```
+
+The token is used only for cloning and the GitHub API. It is never written to disk or into the output file.
 
 ---
 
 ## Troubleshooting
 
-| Problem                                | Fix                                                          |
-| -------------------------------------- | ------------------------------------------------------------ |
-| `git is not installed`               | Install git and reopen your terminal                         |
-| `git clone failed` on a private repo | Set `GITHUB_TOKEN` or pass `--token`                     |
-| `GitHub API refused the request`     | You hit the unauthenticated rate limit; set `GITHUB_TOKEN` |
-| `No readable code files found`       | Check your `--ext` and `-e` filters                      |
-| Output is too large for your AI        | Filter by extension, exclude folders, lower `--max-kb`     |
+| Problem | Fix |
+|---------|-----|
+| `'python' is not recognized` | Reinstall Python and tick "Add to PATH", or try `py ingot.py` |
+| `'ingot' is not recognized` | Use `python ingot.py` instead, or add Python's Scripts folder to PATH |
+| `git is not installed` | Install Git, then reopen the terminal |
+| `git clone failed` on a private repo | Set `GITHUB_TOKEN` or pass `--token` |
+| `GitHub API refused the request` | Rate limit reached. Set `GITHUB_TOKEN` |
+| `No readable code files found` | Check your extension and exclude filters |
+| Web page says it cannot reach the server | The terminal running `python ingot.py web` was closed. Start it again |
+| Bundle too big for your AI | Filter with `--ext`, `-e` or `--max-kb` |
 
 ---
 
 ## Roadmap
 
-- Split output into multiple parts for small context windows
-- Strip comments and blank lines option
-- Copy result straight to the clipboard
+- Split a bundle into multiple parts for small context windows
+- Option to strip comments and blank lines
 - Nested `.gitignore` support
+- Account browsing with a token for private repos in the web UI
 
 ---
-
-## Contributing
-
-Issues and pull requests are welcome. Ingot is a single file, `ingot.py`, so it is easy to read and hack on.
 
 ## License
 

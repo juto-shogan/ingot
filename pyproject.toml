@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ingot-cli"
-version = "1.0.0"
+version = "1.1.0"
 description = "Melt a GitHub repo or local folder into one AI-ready text file."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -20,4 +20,4 @@ classifiers = [
 ingot = "ingot:main"
 
 [tool.setuptools]
-py-modules = ["ingot"]
+py-modules = ["ingot", "ingot_web"]
