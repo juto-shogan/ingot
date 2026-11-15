@@ -82,11 +82,11 @@ Your bundle lands in the `output/` folder as `<project>_<timestamp>.txt`.
 
 Shortcuts live in `~/.ingot/saved.json` and come in three types:
 
-| Type | What it stores | Example |
-|------|----------------|---------|
-| `github` | a single repo | `octocat/Hello-World` |
-| `account` | a GitHub user or org; Ingot lists their repos so you pick one | `octocat` |
-| `local` | a folder path | `C:\Users\me\projects\app` |
+| Type        | What it stores                                                | Example                      |
+| ----------- | ------------------------------------------------------------- | ---------------------------- |
+| `github`  | a single repo                                                 | `octocat/Hello-World`      |
+| `account` | a GitHub user or org; Ingot lists their repos so you pick one | `octocat`                  |
+| `local`   | a folder path                                                 | `C:\Users\me\projects\app` |
 
 ```bash
 ingot save work-api github mycompany/api
@@ -101,16 +101,16 @@ ingot remove notes
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `-o, --out DIR` | output folder (default `./output`) |
-| `-b, --branch NAME` | branch or tag to clone (GitHub only) |
-| `-e, --exclude PATTERN` | glob to skip, repeatable (e.g. `-e "*.test.js" -e "docs/*"`) |
-| `--ext EXT` | only include these extensions, repeatable (e.g. `--ext py --ext md`) |
-| `--max-kb N` | skip files larger than N KB (default 500) |
-| `--no-gitignore` | do not honor the repo's `.gitignore` |
-| `--token TOKEN` | GitHub token for private repos |
-| `--save NAME` | save the source as a shortcut after running |
+| Flag                      | Description                                                            |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `-o, --out DIR`         | output folder (default `./output`)                                   |
+| `-b, --branch NAME`     | branch or tag to clone (GitHub only)                                   |
+| `-e, --exclude PATTERN` | glob to skip, repeatable (e.g. `-e "*.test.js" -e "docs/*"`)         |
+| `--ext EXT`             | only include these extensions, repeatable (e.g. `--ext py --ext md`) |
+| `--max-kb N`            | skip files larger than N KB (default 500)                              |
+| `--no-gitignore`        | do not honor the repo's `.gitignore`                                 |
+| `--token TOKEN`         | GitHub token for private repos                                         |
+| `--save NAME`           | save the source as a shortcut after running                            |
 
 ### Private repos
 
@@ -181,13 +181,13 @@ If the file is too big, narrow it down with `--ext`, `-e` or `--max-kb`.
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---------|-----|
-| `git is not installed` | Install git and reopen your terminal |
-| `git clone failed` on a private repo | Set `GITHUB_TOKEN` or pass `--token` |
-| `GitHub API refused the request` | You hit the unauthenticated rate limit; set `GITHUB_TOKEN` |
-| `No readable code files found` | Check your `--ext` and `-e` filters |
-| Output is too large for your AI | Filter by extension, exclude folders, lower `--max-kb` |
+| Problem                                | Fix                                                          |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `git is not installed`               | Install git and reopen your terminal                         |
+| `git clone failed` on a private repo | Set `GITHUB_TOKEN` or pass `--token`                     |
+| `GitHub API refused the request`     | You hit the unauthenticated rate limit; set `GITHUB_TOKEN` |
+| `No readable code files found`       | Check your `--ext` and `-e` filters                      |
+| Output is too large for your AI        | Filter by extension, exclude folders, lower `--max-kb`     |
 
 ---
 
@@ -207,4 +207,3 @@ Issues and pull requests are welcome. Ingot is a single file, `ingot.py`, so it 
 ## License
 
 MIT
-# ingot

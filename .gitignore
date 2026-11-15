@@ -1,0 +1,9 @@
+# python make
+ingot_cli.egg-info
+build
+
+# virtual envornments
+.venv/
+.env/
+venv/
+env/
